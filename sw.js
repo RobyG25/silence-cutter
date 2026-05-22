@@ -1,5 +1,11 @@
 // CutSilence Service Worker
-const CACHE_NAME = 'cutsilence-v1';
+// ─────────────────────────────────────────────────────────────────
+//  IMPORTANT: מזריק COOP + COEP headers לכל הבקשות
+//  זה נדרש כדי ש-FFmpeg.wasm יוכל להשתמש ב-SharedArrayBuffer
+//  (GitHub Pages לא מאפשר להגדיר headers ישירות)
+// ─────────────────────────────────────────────────────────────────
+
+const CACHE_NAME = 'cutsilence-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -10,46 +16,81 @@ const ASSETS = [
   './icons/icon-512.png',
 ];
 
-// Install — cache all assets
+// Install
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return Promise.allSettled(
-        ASSETS.map(url => cache.add(url).catch(() => {}))
-      );
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.allSettled(ASSETS.map(url => cache.add(url).catch(() => {})))
+    ).then(() => self.skipWaiting())
   );
 });
 
-// Activate — clean old caches
+// Activate
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch — cache first for app assets, network for external
+// ── Inject COOP/COEP headers into every response ──
+function addSecurityHeaders(response) {
+  // Don't touch opaque responses (cross-origin no-cors)
+  if (response.type === 'opaque') return response;
+
+  const newHeaders = new Headers(response.headers);
+  newHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
+  newHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  newHeaders.set('Cross-Origin-Resource-Policy', 'cross-origin');
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
+}
+
+// Fetch
 self.addEventListener('fetch', event => {
+  // Only handle GET
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === location.origin;
+  const isCDN = url.hostname.includes('jsdelivr.net') ||
+                url.hostname.includes('unpkg.com') ||
+                url.hostname.includes('cdnjs.cloudflare.com');
 
-  // Only cache same-origin requests
-  if (url.origin !== location.origin) return;
+  event.respondWith((async () => {
+    // Same-origin: cache first
+    if (isSameOrigin) {
+      const cached = await caches.match(event.request);
+      if (cached) return addSecurityHeaders(cached);
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-
-      return fetch(event.request).then(response => {
-        if (response.ok && event.request.method === 'GET') {
+      try {
+        const response = await fetch(event.request);
+        if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
-        return response;
-      }).catch(() => cached);
-    })
-  );
+        return addSecurityHeaders(response);
+      } catch {
+        return cached || new Response('Offline', { status: 503 });
+      }
+    }
+
+    // CDN (FFmpeg WASM etc): network with COEP header
+    if (isCDN) {
+      try {
+        const response = await fetch(event.request, { mode: 'cors' });
+        return addSecurityHeaders(response);
+      } catch {
+        return fetch(event.request);
+      }
+    }
+
+    // Everything else: pass through
+    return fetch(event.request);
+  })());
 });
