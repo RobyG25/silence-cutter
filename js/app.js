@@ -358,26 +358,32 @@ async function loadFFmpeg() {
 
   $('exportNote').textContent = 'טוען FFmpeg (פעם ראשונה בלבד)...';
 
-  const { FFmpeg } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
-  const { fetchFile, toBlobURL } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js');
-
-  const ff = new FFmpeg();
-
-  ff.on('log', ({ message }) => {
-    // Parse FFmpeg progress from log
-    const timeMatch = message.match(/time=(\d+):(\d+):([\d.]+)/);
-    if (timeMatch) {
-      const secs = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseFloat(timeMatch[3]);
-      window._ffmpegTime = secs;
-    }
+  // UMD build — no external Worker, עובד מכל origin ללא COOP/COEP
+  const { createFFmpeg, fetchFile } = await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+    script.onload = () => resolve(window.FFmpeg ? window.FFmpeg : { createFFmpeg: window.createFFmpeg, fetchFile: window.fetchFile });
+    script.onerror = reject;
+    document.head.appendChild(script);
   });
 
-  // Load WASM core — use multi-thread if SharedArrayBuffer available, else single
-  const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
-  await ff.load({
-    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+  const ff = createFFmpeg({
+    log: true,
+    logger: ({ message }) => {
+      const timeMatch = message.match(/time=(\d+):(\d+):([\d.]+)/);
+      if (timeMatch) {
+        const secs = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseFloat(timeMatch[3]);
+        window._ffmpegTime = secs;
+      }
+    },
+    corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
   });
+
+  await ff.load();
+
+  // 0.11.x API: ff.run(...args) instead of ff.exec([...args])
+  // wrap to unify API
+  ff.exec = (args) => ff.run(...args);
 
   ffmpegInstance = { ff, fetchFile };
   return ffmpegInstance;
