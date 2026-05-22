@@ -389,8 +389,10 @@ async function loadFFmpeg() {
         window._ffmpegTime = secs;
       }
     },
-    // core-st = single-thread, לא דורש SharedArrayBuffer או COOP/COEP headers
+    // core-st@0.11.0: לא דורש SharedArrayBuffer ולא Worker חיצוני
+    // mainName: 'main' כי core-st מייצא _main ולא proxy_main (ברירת המחדל של ffmpeg@0.11.6)
     corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.js',
+    mainName: 'main',
   });
 
   $('exportNote').textContent = 'מאתחל FFmpeg...';
