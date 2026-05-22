@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="description" content="חותך רגעים שקטים בסרטונים באופן אוטומטי" />
+  <title>CutSilence — חותך שקט</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Heebo:wght@300;400;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <header>
+    <div class="logo">
+      <span class="logo-icon">✂</span>
+      <span class="logo-text">CutSilence</span>
+    </div>
+    <div class="tagline">מחסל שקט. מאיץ קצב.</div>
+  </header>
+
+  <main>
+    <!-- STEP 1: Upload -->
+    <section id="step-upload" class="step active">
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-inner">
+          <div class="drop-icon">🎬</div>
+          <p class="drop-title">גרור סרטון לכאן</p>
+          <p class="drop-sub">או לחץ לבחירה</p>
+          <p class="drop-hint">MP4 · MOV · AVI · WEBM</p>
+        </div>
+        <input type="file" id="fileInput" accept="video/*" hidden />
+      </div>
+    </section>
+
+    <!-- STEP 2: Settings + Analyze -->
+    <section id="step-settings" class="step">
+      <div class="video-preview-wrap">
+        <video id="previewVideo" controls playsinline></video>
+        <div class="video-info" id="videoInfo"></div>
+      </div>
+
+      <div class="settings-panel">
+        <h2 class="panel-title">⚙️ הגדרות ניתוח</h2>
+        <div class="settings-grid">
+          <div class="setting-item">
+            <label>סף שקט (dB)</label>
+            <div class="range-wrap">
+              <input type="range" id="silenceThreshold" min="-80" max="-20" value="-40" step="1" />
+              <span id="thresholdVal">-40 dB</span>
+            </div>
+            <p class="setting-hint">ערך נמוך = רק שקט מוחלט | ערך גבוה = גם רעש נמוך</p>
+          </div>
+          <div class="setting-item">
+            <label>משך שקט מינימלי לחיתוך (שניות)</label>
+            <div class="range-wrap">
+              <input type="range" id="minSilence" min="0.1" max="3" value="0.5" step="0.1" />
+              <span id="minSilenceVal">0.5 שנ'</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label>מרווח לפני/אחרי חיתוך (שניות)</label>
+            <div class="range-wrap">
+              <input type="range" id="padding" min="0" max="0.5" value="0.05" step="0.01" />
+              <span id="paddingVal">0.05 שנ'</span>
+            </div>
+            <p class="setting-hint">מרווח קטן = חיתוך חד | גדול = טבעי יותר</p>
+          </div>
+        </div>
+        <button id="analyzeBtn" class="btn-primary">
+          <span class="btn-icon">🔍</span> נתח שקט
+        </button>
+      </div>
+    </section>
+
+    <!-- STEP 3: Results -->
+    <section id="step-results" class="step">
+      <div class="results-header">
+        <h2 class="panel-title">✂️ רגעים שקטים שזוהו</h2>
+        <div class="results-stats" id="resultsStats"></div>
+      </div>
+
+      <div class="progress-bar-wrap" id="progressWrap" style="display:none">
+        <div class="progress-label" id="progressLabel">מנתח...</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <div class="waveform-container">
+        <canvas id="waveformCanvas"></canvas>
+        <div class="waveform-overlay" id="waveformOverlay"></div>
+      </div>
+
+      <div class="segments-list" id="segmentsList"></div>
+
+      <div class="actions-bar">
+        <button id="selectAllBtn" class="btn-secondary">בחר הכל</button>
+        <button id="deselectAllBtn" class="btn-secondary">בטל הכל</button>
+        <button id="exportBtn" class="btn-primary" disabled>
+          <span class="btn-icon">⬇️</span> ייצא MP4
+        </button>
+      </div>
+    </section>
+
+    <!-- STEP 4: Export Progress -->
+    <section id="step-export" class="step">
+      <div class="export-panel">
+        <div class="export-icon">🎞️</div>
+        <h2>מייצא סרטון...</h2>
+        <div class="export-progress-wrap">
+          <div class="progress-track big">
+            <div class="progress-fill" id="exportFill"></div>
+          </div>
+          <div class="export-pct" id="exportPct">0%</div>
+        </div>
+        <p class="export-note" id="exportNote">מכין קטעים...</p>
+        <div class="export-warning">
+          ⚠️ אל תסגור את הדף בזמן הייצוא
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
