@@ -358,11 +358,11 @@ async function loadFFmpeg() {
 
   $('exportNote').textContent = 'טוען FFmpeg (פעם ראשונה בלבד)...';
 
-  // UMD build — no external Worker, עובד מכל origin ללא COOP/COEP
+  // גרסה single-thread — לא צריכה SharedArrayBuffer בכלל
   const { createFFmpeg, fetchFile } = await new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
-    script.onload = () => resolve(window.FFmpeg ? window.FFmpeg : { createFFmpeg: window.createFFmpeg, fetchFile: window.fetchFile });
+    script.onload = () => resolve({ createFFmpeg: window.createFFmpeg, fetchFile: window.fetchFile });
     script.onerror = reject;
     document.head.appendChild(script);
   });
@@ -376,13 +376,12 @@ async function loadFFmpeg() {
         window._ffmpegTime = secs;
       }
     },
-    corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+    // single-thread core — לא משתמש ב-SharedArrayBuffer
+    corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
   });
 
   await ff.load();
 
-  // 0.11.x API: ff.run(...args) instead of ff.exec([...args])
-  // wrap to unify API
   ff.exec = (args) => ff.run(...args);
 
   ffmpegInstance = { ff, fetchFile };
