@@ -390,7 +390,7 @@ async function loadFFmpeg() {
       }
     },
     // core-st = single-thread, לא דורש SharedArrayBuffer או COOP/COEP headers
-    corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+    corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.0/dist/ffmpeg-core.js',
   });
 
   $('exportNote').textContent = 'מאתחל FFmpeg...';
