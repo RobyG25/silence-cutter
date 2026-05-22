@@ -331,6 +331,8 @@ function updateExportBtn() {
   }
 }
 
+$('backToSettingsBtn').addEventListener('click', () => showStep('step-settings'));
+
 $('selectAllBtn').addEventListener('click', () => {
   silenceSegments.forEach((_, i) => selectedSegments.add(i));
   renderSegments();
