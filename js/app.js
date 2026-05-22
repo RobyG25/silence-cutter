@@ -345,8 +345,42 @@ $('deselectAllBtn').addEventListener('click', () => {
 });
 
 // ══════════════════════════════════════
-//  EXPORT — Pure browser, no FFmpeg
+//  EXPORT — FFmpeg.wasm → תמיד MP4 אמיתי
 // ══════════════════════════════════════
+
+// FFmpeg.wasm נטען מ-CDN רק כשצריך
+let ffmpegInstance = null;
+
+async function loadFFmpeg() {
+  if (ffmpegInstance) return ffmpegInstance;
+
+  $('exportNote').textContent = 'טוען FFmpeg (פעם ראשונה בלבד)...';
+
+  const { FFmpeg } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
+  const { fetchFile, toBlobURL } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js');
+
+  const ff = new FFmpeg();
+
+  ff.on('log', ({ message }) => {
+    // Parse FFmpeg progress from log
+    const timeMatch = message.match(/time=(\d+):(\d+):([\d.]+)/);
+    if (timeMatch) {
+      const secs = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseFloat(timeMatch[3]);
+      window._ffmpegTime = secs;
+    }
+  });
+
+  // Load WASM core — use multi-thread if SharedArrayBuffer available, else single
+  const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
+  await ff.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+  });
+
+  ffmpegInstance = { ff, fetchFile };
+  return ffmpegInstance;
+}
+
 exportBtn.addEventListener('click', startExport);
 
 async function startExport() {
@@ -354,7 +388,6 @@ async function startExport() {
     .map(i => silenceSegments[i])
     .sort((a, b) => a.start - b.start);
 
-  // Build "keep" segments (inverse of silence)
   const keepSegments = buildKeepSegments(segsToRemove);
 
   if (keepSegments.length === 0) {
@@ -368,7 +401,7 @@ async function startExport() {
   $('exportNote').textContent = 'מכין ייצוא...';
 
   try {
-    await exportVideoSegments(keepSegments);
+    await exportWithFFmpeg(keepSegments);
   } catch (err) {
     console.error(err);
     toast('❌ שגיאה בייצוא: ' + err.message);
@@ -394,163 +427,95 @@ function buildKeepSegments(silences) {
   return keep;
 }
 
-async function exportVideoSegments(keepSegments) {
-  $('exportNote').textContent = 'בודק יכולות הדפדפן...';
+async function exportWithFFmpeg(keepSegments) {
+  // Load FFmpeg
+  const { ff, fetchFile } = await loadFFmpeg();
 
-  // Check for MediaRecorder support
-  if (!window.MediaRecorder) {
-    throw new Error('הדפדפן אינו תומך בהקלטת מדיה');
-  }
+  $('exportNote').textContent = 'מעלה קובץ לעיבוד...';
+  $('exportFill').style.width = '10%';
+  $('exportPct').textContent = '10%';
 
-  // Determine best mimeType
-  const mimeTypes = [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm;codecs=h264,opus',
-    'video/webm',
-    'video/mp4',
-  ];
-  let mimeType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+  // Write input file to FFmpeg virtual FS
+  await ff.writeFile('input.mp4', await fetchFile(videoFile));
 
-  $('exportNote').textContent = `פורמט: ${mimeType.split(';')[0]}`;
+  $('exportFill').style.width = '20%';
+  $('exportNote').textContent = 'בונה פילטר חיתוך...';
 
-  // Check target resolution
+  // ── Build FFmpeg filter_complex for cutting ──
+  // Strategy: use select+aselect filters to include only keep segments
   const vw = previewVideo.videoWidth;
   const vh = previewVideo.videoHeight;
   const targetH = Math.max(720, vh);
   const targetW = Math.round(vw * (targetH / vh));
+  // ensure even dimensions (required by h264)
+  const outW = targetW % 2 === 0 ? targetW : targetW + 1;
+  const outH = targetH % 2 === 0 ? targetH : targetH + 1;
 
-  $('exportNote').textContent = `רזולוציה: ${targetW}×${targetH}`;
+  // Build select expression: keep segments as time ranges
+  const selectParts = keepSegments.map(s =>
+    `between(t,${s.start.toFixed(4)},${s.end.toFixed(4)})`
+  );
+  const selectExpr = selectParts.join('+');
 
-  // Create offscreen canvas
-  const canvas = document.createElement('canvas');
-  canvas.width = targetW;
-  canvas.height = targetH;
-  const ctx = canvas.getContext('2d');
+  // Total output duration for progress tracking
+  const totalOutDuration = keepSegments.reduce((a, s) => a + (s.end - s.start), 0);
+  window._ffmpegTime = 0;
 
-  // Create audio destination
-  const audioCtx = new AudioContext();
-  const dest = audioCtx.createMediaStreamDestination();
-  const videoSource = audioCtx.createMediaElementSource(previewVideo);
-  videoSource.connect(dest);
-  videoSource.connect(audioCtx.destination);
+  // Progress polling
+  const progressInterval = setInterval(() => {
+    const t = window._ffmpegTime || 0;
+    const pct = Math.min(95, 20 + Math.round((t / totalOutDuration) * 75));
+    $('exportFill').style.width = pct + '%';
+    $('exportPct').textContent = pct + '%';
+    $('exportNote').textContent = `מעבד... ${fmt(t)} / ${fmt(totalOutDuration)}`;
+  }, 300);
 
-  // Combine video + audio streams
-  const videoStream = canvas.captureStream(30);
-  const audioStream = dest.stream;
-  const combinedStream = new MediaStream([
-    ...videoStream.getVideoTracks(),
-    ...audioStream.getAudioTracks(),
-  ]);
-
-  // Setup MediaRecorder
-  const chunks = [];
-  const recorder = new MediaRecorder(combinedStream, {
-    mimeType,
-    videoBitsPerSecond: 5_000_000, // 5 Mbps — good for 720p
-    audioBitsPerSecond: 192_000,
-  });
-
-  recorder.ondataavailable = e => {
-    if (e.data && e.data.size > 0) chunks.push(e.data);
-  };
-
-  let resolveExport;
-  const exportDone = new Promise(res => { resolveExport = res; });
-  recorder.onstop = resolveExport;
-
-  recorder.start(100); // chunk every 100ms
-
-  // Process each keep segment
-  const totalDuration = keepSegments.reduce((a, s) => a + (s.end - s.start), 0);
-  let processedDuration = 0;
-
-  previewVideo.muted = false;
-  previewVideo.volume = 1;
-
-  for (let si = 0; si < keepSegments.length; si++) {
-    const seg = keepSegments[si];
-    const segDur = seg.end - seg.start;
-
-    $('exportNote').textContent = `מעבד קטע ${si + 1}/${keepSegments.length} (${fmt(seg.start)} → ${fmt(seg.end)})`;
-
-    // Seek to segment start
-    previewVideo.currentTime = seg.start;
-    await waitForSeek(previewVideo);
-
-    // Play and capture
-    previewVideo.playbackRate = 1.0;
-    previewVideo.play();
-
-    const segStart = performance.now();
-    await new Promise(resolve => {
-      const tick = () => {
-        const elapsed = (performance.now() - segStart) / 1000;
-        const localPos = elapsed;
-
-        // Draw current video frame
-        ctx.drawImage(previewVideo, 0, 0, targetW, targetH);
-
-        // Update progress
-        const globalProgress = (processedDuration + Math.min(localPos, segDur)) / totalDuration;
-        const pct = Math.round(globalProgress * 100);
-        $('exportFill').style.width = pct + '%';
-        $('exportPct').textContent = pct + '%';
-
-        // Check if we're past the segment end
-        if (previewVideo.currentTime >= seg.end - 0.05 || localPos >= segDur) {
-          previewVideo.pause();
-          processedDuration += segDur;
-          resolve();
-        } else {
-          requestAnimationFrame(tick);
-        }
-      };
-      requestAnimationFrame(tick);
-    });
-
-    previewVideo.pause();
-    // Small gap between segments
-    await sleep(50);
+  try {
+    await ff.exec([
+      '-i', 'input.mp4',
+      '-vf', `select='${selectExpr}',setpts=N/FRAME_RATE/TB,scale=${outW}:${outH}`,
+      '-af', `aselect='${selectExpr}',asetpts=N/SR/TB`,
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '22',           // quality: 18=best, 28=worst, 22=good balance
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-movflags', '+faststart',
+      '-y',
+      'output.mp4'
+    ]);
+  } finally {
+    clearInterval(progressInterval);
   }
 
-  // Stop recording
-  recorder.stop();
-  await exportDone;
-  await audioCtx.close();
+  $('exportFill').style.width = '97%';
+  $('exportNote').textContent = 'קורא קובץ פלט...';
+
+  // Read output
+  const data = await ff.readFile('output.mp4');
+
+  // Cleanup FFmpeg FS
+  await ff.deleteFile('input.mp4').catch(() => {});
+  await ff.deleteFile('output.mp4').catch(() => {});
 
   $('exportFill').style.width = '100%';
   $('exportPct').textContent = '100%';
-  $('exportNote').textContent = 'מכין להורדה...';
+  $('exportNote').textContent = 'מוריד...';
 
-  // Determine output extension
-  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-  const blob = new Blob(chunks, { type: mimeType });
+  const blob = new Blob([data.buffer], { type: 'video/mp4' });
   const url = URL.createObjectURL(blob);
 
   const a = document.createElement('a');
   a.href = url;
-  a.download = `cutsilence_${Date.now()}.${ext}`;
+  a.download = `cutsilence_${Date.now()}.mp4`;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
 
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 
-  toast(`✅ הסרטון הורד! (${(blob.size / 1024 / 1024).toFixed(1)} MB)`, 5000);
-
-  // Return to results
+  toast(`✅ MP4 הורד! (${(blob.size / 1024 / 1024).toFixed(1)} MB · ${outW}×${outH})`, 5000);
   setTimeout(() => showStep('step-results'), 1500);
-}
-
-function waitForSeek(video) {
-  return new Promise(resolve => {
-    const handler = () => {
-      video.removeEventListener('seeked', handler);
-      resolve();
-    };
-    video.addEventListener('seeked', handler);
-    // Timeout fallback
-    setTimeout(resolve, 2000);
-  });
 }
 
 function sleep(ms) {
