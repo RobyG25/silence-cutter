@@ -353,41 +353,56 @@ $('deselectAllBtn').addEventListener('click', () => {
 // FFmpeg.wasm נטען מ-CDN רק כשצריך
 let ffmpegInstance = null;
 
+// ══════════════════════════════════════
+//  טעינת FFmpeg.wasm — single-thread, ללא SharedArrayBuffer, ללא Worker חיצוני
+// ══════════════════════════════════════
 async function loadFFmpeg() {
   if (ffmpegInstance) return ffmpegInstance;
 
-  $('exportNote').textContent = 'טוען FFmpeg (פעם ראשונה בלבד)...';
+  $('exportNote').textContent = 'טוען FFmpeg (פעם ראשונה — כ-20MB)...';
 
-  // גרסה single-thread — לא צריכה SharedArrayBuffer בכלל
-  const { createFFmpeg, fetchFile } = await new Promise((resolve, reject) => {
+  // טוען את ה-UMD bundle — מייצא window.FFmpeg = { createFFmpeg, fetchFile }
+  await new Promise((resolve, reject) => {
+    if (window.FFmpeg && window.FFmpeg.createFFmpeg) return resolve();
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
-    script.onload = () => resolve({ createFFmpeg: window.createFFmpeg, fetchFile: window.fetchFile });
-    script.onerror = reject;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('לא ניתן לטעון את FFmpeg מה-CDN'));
     document.head.appendChild(script);
   });
+
+  const { createFFmpeg, fetchFile } = window.FFmpeg;
+
+  if (typeof createFFmpeg !== 'function') {
+    throw new Error('FFmpeg לא נטען כהלכה — נסה לרענן את הדף');
+  }
 
   const ff = createFFmpeg({
     log: true,
     logger: ({ message }) => {
+      // מעקב אחר התקדמות הייצוא
       const timeMatch = message.match(/time=(\d+):(\d+):([\d.]+)/);
       if (timeMatch) {
-        const secs = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseFloat(timeMatch[3]);
+        const secs = parseInt(timeMatch[1]) * 3600
+                   + parseInt(timeMatch[2]) * 60
+                   + parseFloat(timeMatch[3]);
         window._ffmpegTime = secs;
       }
     },
-    // single-thread core — לא משתמש ב-SharedArrayBuffer
+    // core-st = single-thread, לא דורש SharedArrayBuffer או COOP/COEP headers
     corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
   });
 
+  $('exportNote').textContent = 'מאתחל FFmpeg...';
   await ff.load();
-
-  ff.exec = (args) => ff.run(...args);
 
   ffmpegInstance = { ff, fetchFile };
   return ffmpegInstance;
 }
 
+// ══════════════════════════════════════
+//  ייצוא
+// ══════════════════════════════════════
 exportBtn.addEventListener('click', startExport);
 
 async function startExport() {
@@ -419,56 +434,44 @@ async function startExport() {
 function buildKeepSegments(silences) {
   const keep = [];
   let pos = 0;
-
   for (const seg of silences) {
-    if (seg.start > pos + 0.01) {
-      keep.push({ start: pos, end: seg.start });
-    }
+    if (seg.start > pos + 0.01) keep.push({ start: pos, end: seg.start });
     pos = seg.end;
   }
-
-  if (pos < videoDuration - 0.01) {
-    keep.push({ start: pos, end: videoDuration });
-  }
-
+  if (pos < videoDuration - 0.01) keep.push({ start: pos, end: videoDuration });
   return keep;
 }
 
 async function exportWithFFmpeg(keepSegments) {
-  // Load FFmpeg
   const { ff, fetchFile } = await loadFFmpeg();
 
   $('exportNote').textContent = 'מעלה קובץ לעיבוד...';
   $('exportFill').style.width = '10%';
   $('exportPct').textContent = '10%';
 
-  // Write input file to FFmpeg virtual FS
-  await ff.writeFile('input.mp4', await fetchFile(videoFile));
+  // כתוב קובץ קלט למערכת הקבצים הווירטואלית של FFmpeg
+  ff.FS('writeFile', 'input.mp4', await fetchFile(videoFile));
 
   $('exportFill').style.width = '20%';
   $('exportNote').textContent = 'בונה פילטר חיתוך...';
 
-  // ── Build FFmpeg filter_complex for cutting ──
-  // Strategy: use select+aselect filters to include only keep segments
+  // חשב רזולוציה — מינימום 720p, תמיד מספרים זוגיים (דרישת h264)
   const vw = previewVideo.videoWidth;
   const vh = previewVideo.videoHeight;
   const targetH = Math.max(720, vh);
   const targetW = Math.round(vw * (targetH / vh));
-  // ensure even dimensions (required by h264)
   const outW = targetW % 2 === 0 ? targetW : targetW + 1;
   const outH = targetH % 2 === 0 ? targetH : targetH + 1;
 
-  // Build select expression: keep segments as time ranges
+  // בנה select expression לחיתוך הקטעים השקטים
   const selectParts = keepSegments.map(s =>
     `between(t,${s.start.toFixed(4)},${s.end.toFixed(4)})`
   );
   const selectExpr = selectParts.join('+');
-
-  // Total output duration for progress tracking
   const totalOutDuration = keepSegments.reduce((a, s) => a + (s.end - s.start), 0);
   window._ffmpegTime = 0;
 
-  // Progress polling
+  // עדכן progress בזמן עיבוד
   const progressInterval = setInterval(() => {
     const t = window._ffmpegTime || 0;
     const pct = Math.min(95, 20 + Math.round((t / totalOutDuration) * 75));
@@ -478,19 +481,20 @@ async function exportWithFFmpeg(keepSegments) {
   }, 300);
 
   try {
-    await ff.exec([
+    // run() ב-0.11.x מקבל args בודדים (לא מערך)
+    await ff.run(
       '-i', 'input.mp4',
       '-vf', `select='${selectExpr}',setpts=N/FRAME_RATE/TB,scale=${outW}:${outH}`,
       '-af', `aselect='${selectExpr}',asetpts=N/SR/TB`,
       '-c:v', 'libx264',
       '-preset', 'fast',
-      '-crf', '22',           // quality: 18=best, 28=worst, 22=good balance
+      '-crf', '22',
       '-c:a', 'aac',
       '-b:a', '192k',
       '-movflags', '+faststart',
       '-y',
       'output.mp4'
-    ]);
+    );
   } finally {
     clearInterval(progressInterval);
   }
@@ -498,12 +502,11 @@ async function exportWithFFmpeg(keepSegments) {
   $('exportFill').style.width = '97%';
   $('exportNote').textContent = 'קורא קובץ פלט...';
 
-  // Read output
-  const data = await ff.readFile('output.mp4');
+  const data = ff.FS('readFile', 'output.mp4');
 
-  // Cleanup FFmpeg FS
-  await ff.deleteFile('input.mp4').catch(() => {});
-  await ff.deleteFile('output.mp4').catch(() => {});
+  // נקה את ה-FS
+  try { ff.FS('unlink', 'input.mp4'); } catch {}
+  try { ff.FS('unlink', 'output.mp4'); } catch {}
 
   $('exportFill').style.width = '100%';
   $('exportPct').textContent = '100%';
@@ -511,22 +514,16 @@ async function exportWithFFmpeg(keepSegments) {
 
   const blob = new Blob([data.buffer], { type: 'video/mp4' });
   const url = URL.createObjectURL(blob);
-
   const a = document.createElement('a');
   a.href = url;
   a.download = `cutsilence_${Date.now()}.mp4`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 
   toast(`✅ MP4 הורד! (${(blob.size / 1024 / 1024).toFixed(1)} MB · ${outW}×${outH})`, 5000);
   setTimeout(() => showStep('step-results'), 1500);
-}
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
 }
 
 // ── Redraw waveform on resize ──
