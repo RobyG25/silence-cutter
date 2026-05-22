@@ -94,6 +94,46 @@ $('padding').addEventListener('input', function() {
   $('paddingVal').textContent = parseFloat(this.value).toFixed(2) + " שנ'";
 });
 
+// ── "נסה בשבילי" — הגדרות אוטומטיות + ניתוח מיידי ──
+$('autoBtn').addEventListener('click', async () => {
+  // הגדרות מומלצות
+  $('silenceThreshold').value = -40;
+  $('thresholdVal').textContent = '-40 dB';
+  $('minSilence').value = 0.5;
+  $('minSilenceVal').textContent = "0.5 שנ'";
+  $('padding').value = 0.05;
+  $('paddingVal').textContent = "0.05 שנ'";
+  setSensitivity('medium');
+
+  // הפעל ניתוח מיידית
+  analyzeBtn.click();
+});
+
+// ── בוחר רגישות ──
+const SENSITIVITY_PRESETS = {
+  low:    { threshold: -55, minSilence: 0.8, padding: 0.1 },
+  medium: { threshold: -40, minSilence: 0.5, padding: 0.05 },
+  high:   { threshold: -28, minSilence: 0.3, padding: 0.02 },
+};
+
+function setSensitivity(level) {
+  const p = SENSITIVITY_PRESETS[level];
+  $('silenceThreshold').value = p.threshold;
+  $('thresholdVal').textContent = p.threshold + ' dB';
+  $('minSilence').value = p.minSilence;
+  $('minSilenceVal').textContent = p.minSilence.toFixed(1) + " שנ'";
+  $('padding').value = p.padding;
+  $('paddingVal').textContent = p.padding.toFixed(2) + " שנ'";
+
+  document.querySelectorAll('.sens-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.level === level);
+  });
+}
+
+document.querySelectorAll('.sens-btn').forEach(btn => {
+  btn.addEventListener('click', () => setSensitivity(btn.dataset.level));
+});
+
 // ── Analyze ──
 analyzeBtn.addEventListener('click', async () => {
   analyzeBtn.disabled = true;
@@ -524,9 +564,48 @@ async function exportWithFFmpeg(keepSegments) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 
-  toast(`✅ MP4 הורד! (${(blob.size / 1024 / 1024).toFixed(1)} MB · ${outW}×${outH})`, 5000);
-  setTimeout(() => showStep('step-results'), 1500);
+  const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+  const savedSec = (videoDuration - totalOutDuration).toFixed(1);
+  const savedPct = Math.round((videoDuration - totalOutDuration) / videoDuration * 100);
+
+  // שמור blob להורדה חוזרת
+  window._lastExportUrl = url;
+  window._lastExportFilename = `cutsilence_${Date.now()}.mp4`;
+
+  // הצג מסך סיום
+  $('exportInProgress').style.display = 'none';
+  $('exportDone').style.display = 'block';
+  $('doneStats').innerHTML = `
+    <div class="done-stat"><span class="done-stat-val">${sizeMB} MB</span><span class="done-stat-label">גודל קובץ</span></div>
+    <div class="done-stat"><span class="done-stat-val">${outW}×${outH}</span><span class="done-stat-label">רזולוציה</span></div>
+    <div class="done-stat"><span class="done-stat-val">−${savedSec}שנ'</span><span class="done-stat-label">נחסך</span></div>
+    <div class="done-stat"><span class="done-stat-val">${savedPct}%</span><span class="done-stat-label">קצר יותר</span></div>
+  `;
 }
+
+// ── כפתורי מסך סיום ──
+$('downloadAgainBtn').addEventListener('click', () => {
+  if (!window._lastExportUrl) return;
+  const a = document.createElement('a');
+  a.href = window._lastExportUrl;
+  a.download = window._lastExportFilename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+});
+
+$('startOverBtn').addEventListener('click', () => {
+  videoFile = null;
+  audioBuffer = null;
+  silenceSegments = [];
+  selectedSegments.clear();
+  videoDuration = 0;
+  previewVideo.src = '';
+  fileInput.value = '';
+  $('exportInProgress').style.display = 'block';
+  $('exportDone').style.display = 'none';
+  showStep('step-upload');
+});
 
 // ── Redraw waveform on resize ──
 window.addEventListener('resize', () => {
