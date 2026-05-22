@@ -45,31 +45,55 @@
 
       <div class="settings-panel">
         <h2 class="panel-title">⚙️ הגדרות ניתוח</h2>
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label>סף שקט (dB)</label>
-            <div class="range-wrap">
-              <input type="range" id="silenceThreshold" min="-80" max="-20" value="-40" step="1" />
-              <span id="thresholdVal">-40 dB</span>
-            </div>
-            <p class="setting-hint">ערך נמוך = רק שקט מוחלט | ערך גבוה = גם רעש נמוך</p>
-          </div>
-          <div class="setting-item">
-            <label>משך שקט מינימלי לחיתוך (שניות)</label>
-            <div class="range-wrap">
-              <input type="range" id="minSilence" min="0.1" max="3" value="0.5" step="0.1" />
-              <span id="minSilenceVal">0.5 שנ'</span>
-            </div>
-          </div>
-          <div class="setting-item">
-            <label>מרווח לפני/אחרי חיתוך (שניות)</label>
-            <div class="range-wrap">
-              <input type="range" id="padding" min="0" max="0.5" value="0.05" step="0.01" />
-              <span id="paddingVal">0.05 שנ'</span>
-            </div>
-            <p class="setting-hint">מרווח קטן = חיתוך חד | גדול = טבעי יותר</p>
+
+        <!-- כפתור "נסה בשבילי" -->
+        <div class="auto-btn-wrap">
+          <button id="autoBtn" class="btn-auto">
+            ✨ נסה בשבילי
+          </button>
+          <p class="auto-hint">בוחר הגדרות אוטומטיות — מומלץ למתחילים</p>
+        </div>
+
+        <!-- בוחר רגישות פשוט -->
+        <div class="sensitivity-wrap">
+          <p class="sensitivity-label">רמת זיהוי שקט</p>
+          <div class="sensitivity-btns">
+            <button class="sens-btn" data-level="low">🔇<br><span>שקט מוחלט</span></button>
+            <button class="sens-btn active" data-level="medium">🔉<br><span>רגיל</span></button>
+            <button class="sens-btn" data-level="high">🔊<br><span>אגרסיבי</span></button>
           </div>
         </div>
+
+        <!-- הגדרות מתקדמות (מוסתרות כברירת מחדל) -->
+        <details class="advanced-details">
+          <summary>הגדרות מתקדמות ⚙️</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label>סף שקט (dB)</label>
+              <div class="range-wrap">
+                <input type="range" id="silenceThreshold" min="-80" max="-20" value="-40" step="1" />
+                <span id="thresholdVal">-40 dB</span>
+              </div>
+              <p class="setting-hint">ערך נמוך = רק שקט מוחלט | ערך גבוה = גם רעש נמוך</p>
+            </div>
+            <div class="setting-item">
+              <label>משך שקט מינימלי לחיתוך (שניות)</label>
+              <div class="range-wrap">
+                <input type="range" id="minSilence" min="0.1" max="3" value="0.5" step="0.1" />
+                <span id="minSilenceVal">0.5 שנ'</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <label>מרווח לפני/אחרי חיתוך (שניות)</label>
+              <div class="range-wrap">
+                <input type="range" id="padding" min="0" max="0.5" value="0.05" step="0.01" />
+                <span id="paddingVal">0.05 שנ'</span>
+              </div>
+              <p class="setting-hint">מרווח קטן = חיתוך חד | גדול = טבעי יותר</p>
+            </div>
+          </div>
+        </details>
+
         <button id="analyzeBtn" class="btn-primary">
           <span class="btn-icon">🔍</span> נתח שקט
         </button>
@@ -109,7 +133,7 @@
 
     <!-- STEP 4: Export Progress -->
     <section id="step-export" class="step">
-      <div class="export-panel">
+      <div class="export-panel" id="exportInProgress">
         <div class="export-icon">🎞️</div>
         <h2>מייצא סרטון...</h2>
         <div class="export-progress-wrap">
@@ -120,8 +144,21 @@
         </div>
         <p class="export-note" id="exportNote">מכין קטעים...</p>
         <div class="export-warning">
-          ⚠️ אל תסגור את הדף בזמן הייצוא
+          ⚠️ אל תסגור את הדף בזמן הייצוא — זה יכול לקחת כמה דקות
         </div>
+      </div>
+
+      <!-- מסך סיום -->
+      <div class="export-done-panel" id="exportDone" style="display:none">
+        <div class="done-icon">🎉</div>
+        <h2 class="done-title">הסרטון מוכן!</h2>
+        <div class="done-stats" id="doneStats"></div>
+        <button id="downloadAgainBtn" class="btn-primary btn-big">
+          ⬇️ הורד שוב
+        </button>
+        <button id="startOverBtn" class="btn-secondary" style="margin-top:12px">
+          🎬 סרטון חדש
+        </button>
       </div>
     </section>
   </main>
