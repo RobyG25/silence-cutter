@@ -125,9 +125,27 @@
         <button id="backToSettingsBtn" class="btn-secondary">⬅️ חזור להגדרות</button>
         <button id="selectAllBtn" class="btn-secondary">בחר הכל</button>
         <button id="deselectAllBtn" class="btn-secondary">בטל הכל</button>
+        <button id="previewBtn" class="btn-secondary btn-preview" disabled>
+          <span class="btn-icon">▶️</span> תצוגה מקדימה
+        </button>
         <button id="exportBtn" class="btn-primary" disabled>
           <span class="btn-icon">⬇️</span> ייצא MP4
         </button>
+      </div>
+
+      <!-- מודל תצוגה מקדימה -->
+      <div class="preview-modal" id="previewModal" style="display:none">
+        <div class="preview-modal-inner">
+          <div class="preview-modal-header">
+            <h3>👁️ תצוגה מקדימה — דולג על שקטים</h3>
+            <button id="closePreviewBtn" class="preview-close">✕</button>
+          </div>
+          <video id="previewModalVideo" controls playsinline></video>
+          <div class="preview-info" id="previewInfo"></div>
+          <button id="exportFromPreviewBtn" class="btn-primary" style="width:100%;margin-top:16px">
+            <span class="btn-icon">⬇️</span> נראה טוב — ייצא MP4
+          </button>
+        </div>
       </div>
     </section>
 
@@ -144,7 +162,7 @@
         </div>
         <p class="export-note" id="exportNote">מכין קטעים...</p>
         <div class="export-warning">
-          ⚠️ אל תסגור את הדף בזמן הייצוא — זה יכול לקחת כמה דקות
+          ⚠️ אל תסגור את הדפדפן ואל תעבור לאפליקציה אחרת בזמן הייצוא — אחרת הכל מתחיל מחדש!
         </div>
       </div>
 
