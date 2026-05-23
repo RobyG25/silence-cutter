@@ -751,3 +751,76 @@ input[type="range"]::-webkit-slider-thumb:hover {
   padding: 18px 48px;
   border-radius: 40px;
 }
+
+/* ══════════════════════════════════════
+   תצוגה מקדימה
+══════════════════════════════════════ */
+.btn-preview { border-color: var(--accent3); color: var(--accent3); }
+.btn-preview:hover { background: rgba(60,255,176,0.07); }
+
+.preview-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.preview-modal-inner {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.preview-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.preview-modal-header h3 {
+  font-size: 15px;
+  font-family: var(--mono);
+  color: var(--accent3);
+}
+
+.preview-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.preview-close:hover { border-color: var(--accent2); color: var(--accent2); }
+
+#previewModalVideo {
+  width: 100%;
+  border-radius: 6px;
+  background: #000;
+  max-height: 50vh;
+}
+
+.preview-info {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 12px;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.preview-info span { color: var(--accent); }
