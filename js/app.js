@@ -86,13 +86,45 @@ function loadFile(file) {
 // ── Settings sliders ──
 $('silenceThreshold').addEventListener('input', function() {
   $('thresholdVal').textContent = this.value + ' dB';
+  saveSettings();
 });
 $('minSilence').addEventListener('input', function() {
   $('minSilenceVal').textContent = parseFloat(this.value).toFixed(1) + " שנ'";
+  saveSettings();
 });
 $('padding').addEventListener('input', function() {
   $('paddingVal').textContent = parseFloat(this.value).toFixed(2) + " שנ'";
+  saveSettings();
 });
+
+// ── זיכרון הגדרות (localStorage) ──
+function saveSettings() {
+  try {
+    localStorage.setItem('cs_settings', JSON.stringify({
+      threshold: $('silenceThreshold').value,
+      minSilence: $('minSilence').value,
+      padding: $('padding').value,
+      sensitivity: document.querySelector('.sens-btn.active')?.dataset.level || 'medium',
+    }));
+  } catch(e) {}
+}
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('cs_settings'));
+    if (!s) return;
+    $('silenceThreshold').value = s.threshold;
+    $('thresholdVal').textContent = s.threshold + ' dB';
+    $('minSilence').value = s.minSilence;
+    $('minSilenceVal').textContent = parseFloat(s.minSilence).toFixed(1) + " שנ'";
+    $('padding').value = s.padding;
+    $('paddingVal').textContent = parseFloat(s.padding).toFixed(2) + " שנ'";
+    if (s.sensitivity) setSensitivity(s.sensitivity);
+  } catch(e) {}
+}
+
+// טען הגדרות שמורות מיד
+loadSettings();
 
 // ── "נסה בשבילי" — הגדרות אוטומטיות + ניתוח מיידי ──
 $('autoBtn').addEventListener('click', async () => {
@@ -128,6 +160,7 @@ function setSensitivity(level) {
   document.querySelectorAll('.sens-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.level === level);
   });
+  saveSettings();
 }
 
 document.querySelectorAll('.sens-btn').forEach(btn => {
@@ -362,8 +395,10 @@ function toggleSegment(i) {
 }
 
 function updateExportBtn() {
-  exportBtn.disabled = selectedSegments.size === 0;
-  if (selectedSegments.size > 0) {
+  const hasSelection = selectedSegments.size > 0;
+  exportBtn.disabled = !hasSelection;
+  $('previewBtn').disabled = !hasSelection;
+  if (hasSelection) {
     const totalCut = [...selectedSegments].reduce((a, i) => a + (silenceSegments[i].end - silenceSegments[i].start), 0);
     exportBtn.innerHTML = `<span class="btn-icon">⬇️</span> ייצא MP4 (חיסכון ${totalCut.toFixed(1)}שנ')`;
   } else {
@@ -529,7 +564,7 @@ async function exportWithFFmpeg(keepSegments) {
       '-vf', `select='${selectExpr}',setpts=N/FRAME_RATE/TB,scale=${outW}:${outH}`,
       '-af', `aselect='${selectExpr}',asetpts=N/SR/TB`,
       '-c:v', 'libx264',
-      '-preset', 'fast',
+      '-preset', 'ultrafast',
       '-crf', '22',
       '-c:a', 'aac',
       '-b:a', '192k',
@@ -605,6 +640,89 @@ $('startOverBtn').addEventListener('click', () => {
   $('exportInProgress').style.display = 'block';
   $('exportDone').style.display = 'none';
   showStep('step-upload');
+});
+
+// ── תצוגה מקדימה ──
+const previewModal = $('previewModal');
+const previewModalVideo = $('previewModalVideo');
+
+function openPreview() {
+  if (selectedSegments.size === 0) {
+    toast('בחר קטעים לחיתוך תחילה');
+    return;
+  }
+
+  const segsToRemove = [...selectedSegments]
+    .map(i => silenceSegments[i])
+    .sort((a, b) => a.start - b.start);
+  const keepSegments = buildKeepSegments(segsToRemove);
+  const totalOut = keepSegments.reduce((a, s) => a + (s.end - s.start), 0);
+  const saved = (videoDuration - totalOut).toFixed(1);
+
+  // הצג מידע
+  $('previewInfo').innerHTML = `
+    <div>משך מקורי: <span>${fmt(videoDuration)}</span></div>
+    <div>אחרי חיתוך: <span>${fmt(totalOut)}</span></div>
+    <div>חיסכון: <span>−${saved} שנ'</span></div>
+    <div>קטעים: <span>${keepSegments.length}</span></div>
+  `;
+
+  // הכן נגן שמדלג
+  previewModalVideo.src = videoBlob;
+  previewModal.style.display = 'flex';
+
+  previewModalVideo.onloadedmetadata = () => {
+    playPreviewSegments(keepSegments, 0);
+  };
+}
+
+function playPreviewSegments(segments, idx) {
+  if (idx >= segments.length) {
+    // סיים — חזור להתחלה
+    previewModalVideo.pause();
+    return;
+  }
+
+  const seg = segments[idx];
+  previewModalVideo.currentTime = seg.start;
+
+  const onSeeked = () => {
+    previewModalVideo.removeEventListener('seeked', onSeeked);
+    previewModalVideo.play();
+
+    const checkEnd = () => {
+      if (previewModalVideo.currentTime >= seg.end - 0.05) {
+        previewModalVideo.pause();
+        playPreviewSegments(segments, idx + 1);
+      } else if (!previewModalVideo.paused) {
+        requestAnimationFrame(checkEnd);
+      }
+    };
+    requestAnimationFrame(checkEnd);
+  };
+
+  previewModalVideo.addEventListener('seeked', onSeeked);
+}
+
+function closePreview() {
+  previewModalVideo.pause();
+  previewModalVideo.src = '';
+  previewModal.style.display = 'none';
+}
+
+$('previewBtn').addEventListener('click', openPreview);
+$('closePreviewBtn').addEventListener('click', closePreview);
+$('exportFromPreviewBtn').addEventListener('click', () => {
+  closePreview();
+  exportBtn.click();
+});
+
+// סגור עם ESC או לחיצה מחוץ למודל
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePreview();
+});
+previewModal.addEventListener('click', e => {
+  if (e.target === previewModal) closePreview();
 });
 
 // ── Redraw waveform on resize ──
