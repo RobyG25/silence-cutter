@@ -878,3 +878,88 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .sens-btn.active small { color: rgba(232,255,60,0.6); }
+
+/* ══════════════════════════════════════
+   חיתוך התחלה/סוף
+══════════════════════════════════════ */
+.trim-controls {
+  background: var(--bg3);
+  border-top: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trim-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trim-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text2);
+  min-width: 120px;
+}
+
+.trim-val {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent);
+  min-width: 56px;
+  text-align: center;
+}
+
+/* כפתורי מובייל */
+.trim-mobile {
+  display: none;
+  align-items: center;
+  gap: 0;
+}
+
+.trim-btn {
+  width: 48px;
+  height: 48px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-radius: 0;
+  line-height: 1;
+}
+
+.trim-btn:first-child { border-radius: 8px 0 0 8px; }
+.trim-btn:last-child  { border-radius: 0 8px 8px 0; }
+
+.trim-btn:active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+/* סלדר מחשב */
+.trim-desktop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.trim-desktop input[type="range"] { flex: 1; }
+
+/* החלפה לפי סוג מסך */
+@media (hover: none) and (pointer: coarse) {
+  .trim-mobile  { display: flex; }
+  .trim-desktop { display: none; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trim-mobile  { display: none; }
+  .trim-desktop { display: flex; }
+}
