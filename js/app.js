@@ -45,7 +45,20 @@ function fmt(sec) {
 }
 
 // ── File Drop / Select ──
-dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('click', (e) => {
+  // אל תפתח כפתור פנימי פעמיים
+  if (e.target.classList.contains('btn-upload-big')) return;
+  fileInput.click();
+});
+
+// כפתור הגדול
+const uploadBigBtn = dropZone.querySelector('.btn-upload-big');
+if (uploadBigBtn) {
+  uploadBigBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    fileInput.click();
+  });
+}
 
 dropZone.addEventListener('dragover', e => {
   e.preventDefault();
