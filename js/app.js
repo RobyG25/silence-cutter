@@ -684,6 +684,12 @@ async function exportWithFFmpeg(keepSegments) {
   `;
 }
 
+// ── החלף סרטון ──
+$('changeVideoBtn').addEventListener('click', () => {
+  fileInput.value = '';
+  fileInput.click();
+});
+
 // ── כפתורי מסך סיום ──
 $('downloadAgainBtn').addEventListener('click', () => {
   if (!window._lastExportUrl) return;
