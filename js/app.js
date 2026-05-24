@@ -12,6 +12,8 @@ let audioBuffer = null;
 let silenceSegments = []; // segments to CUT
 let selectedSegments = new Set();
 let videoDuration = 0;
+let trimStart = 0; // שניות לחתוך מההתחלה
+let trimEnd = 0;   // שניות לחתוך מהסוף
 
 // ── DOM refs ──
 const dropZone = $('dropZone');
@@ -92,9 +94,56 @@ function loadFile(file) {
       <span>💾 <span>${sizeMB} MB</span></span>
       <span>📐 <span>${previewVideo.videoWidth}×${previewVideo.videoHeight}</span></span>
     `;
+    // אפס trim
+    trimStart = 0;
+    trimEnd = 0;
+    updateTrimUI();
+
+    // עדכן max של סלדרים לפי משך הסרטון
+    const maxTrim = Math.min(10, videoDuration / 2);
+    $('trimStartSlider').max = maxTrim;
+    $('trimEndSlider').max = maxTrim;
+
     showStep('step-settings');
   };
 }
+
+// ── לוגיקת Trim ──
+function updateTrimUI() {
+  // מובייל
+  $('trimStartVal').textContent = trimStart.toFixed(1) + " שנ'";
+  $('trimEndVal').textContent   = trimEnd.toFixed(1)   + " שנ'";
+  // מחשב
+  $('trimStartValDesktop').textContent = trimStart.toFixed(1) + " שנ'";
+  $('trimEndValDesktop').textContent   = trimEnd.toFixed(1)   + " שנ'";
+  $('trimStartSlider').value = trimStart;
+  $('trimEndSlider').value   = trimEnd;
+
+  // הצג בנגן
+  if (previewVideo.src) {
+    previewVideo.currentTime = trimStart;
+  }
+}
+
+function setTrimStart(val) {
+  trimStart = Math.max(0, Math.min(val, videoDuration - trimEnd - 0.5));
+  updateTrimUI();
+}
+
+function setTrimEnd(val) {
+  trimEnd = Math.max(0, Math.min(val, videoDuration - trimStart - 0.5));
+  updateTrimUI();
+}
+
+// כפתורי מובייל
+$('trimStartMinus').addEventListener('click', () => setTrimStart(trimStart - 0.5));
+$('trimStartPlus').addEventListener('click',  () => setTrimStart(trimStart + 0.5));
+$('trimEndMinus').addEventListener('click',   () => setTrimEnd(trimEnd - 0.5));
+$('trimEndPlus').addEventListener('click',    () => setTrimEnd(trimEnd + 0.5));
+
+// סלדרי מחשב
+$('trimStartSlider').addEventListener('input', function() { setTrimStart(parseFloat(this.value)); });
+$('trimEndSlider').addEventListener('input',   function() { setTrimEnd(parseFloat(this.value)); });
 
 // ── Settings sliders ──
 $('silenceThreshold').addEventListener('input', function() {
@@ -203,6 +252,8 @@ async function analyzeAudio() {
   const silenceDb = parseFloat($('silenceThreshold').value);
   const minSilenceSec = parseFloat($('minSilence').value);
   const padding = parseFloat($('padding').value);
+  const analyzeStart = trimStart;
+  const analyzeEnd   = videoDuration - trimEnd;
 
   // Show progress
   showStep('step-results');
@@ -265,6 +316,7 @@ async function analyzeAudio() {
 
   for (let i = 0; i < silentWindows.length; i++) {
     const t = i * windowDuration;
+    if (t < analyzeStart || t > analyzeEnd) continue; // דלג על טווח ה-trim
     if (silentWindows[i]) {
       if (silenceStart === null) silenceStart = t;
     } else {
@@ -275,7 +327,7 @@ async function analyzeAudio() {
     }
   }
   if (silenceStart !== null) {
-    rawSilences.push({ start: silenceStart, end: videoDuration });
+    rawSilences.push({ start: silenceStart, end: analyzeEnd });
   }
 
   // Filter by minimum duration and apply padding
@@ -523,12 +575,13 @@ async function startExport() {
 
 function buildKeepSegments(silences) {
   const keep = [];
-  let pos = 0;
+  let pos = trimStart; // מתחיל אחרי ה-trim
+  const endPos = videoDuration - trimEnd; // נגמר לפני ה-trim
   for (const seg of silences) {
     if (seg.start > pos + 0.01) keep.push({ start: pos, end: seg.start });
     pos = seg.end;
   }
-  if (pos < videoDuration - 0.01) keep.push({ start: pos, end: videoDuration });
+  if (pos < endPos - 0.01) keep.push({ start: pos, end: endPos });
   return keep;
 }
 
@@ -648,6 +701,8 @@ $('startOverBtn').addEventListener('click', () => {
   silenceSegments = [];
   selectedSegments.clear();
   videoDuration = 0;
+  trimStart = 0;
+  trimEnd = 0;
   previewVideo.src = '';
   fileInput.value = '';
   $('exportInProgress').style.display = 'block';
