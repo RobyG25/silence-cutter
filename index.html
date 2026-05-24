@@ -44,6 +44,38 @@
       <div class="video-preview-wrap">
         <video id="previewVideo" controls playsinline></video>
         <div class="video-info" id="videoInfo"></div>
+
+        <!-- חיתוך התחלה/סוף -->
+        <div class="trim-controls">
+          <div class="trim-row">
+            <span class="trim-label">✂️ חתוך התחלה</span>
+            <!-- מובייל: כפתורים -->
+            <div class="trim-mobile">
+              <button class="trim-btn" id="trimStartMinus">−</button>
+              <span class="trim-val" id="trimStartVal">0.0 שנ'</span>
+              <button class="trim-btn" id="trimStartPlus">+</button>
+            </div>
+            <!-- מחשב: סלדר -->
+            <div class="trim-desktop">
+              <input type="range" id="trimStartSlider" min="0" max="10" value="0" step="0.5" />
+              <span class="trim-val" id="trimStartValDesktop">0.0 שנ'</span>
+            </div>
+          </div>
+          <div class="trim-row">
+            <span class="trim-label">✂️ חתוך סוף</span>
+            <!-- מובייל: כפתורים -->
+            <div class="trim-mobile">
+              <button class="trim-btn" id="trimEndMinus">−</button>
+              <span class="trim-val" id="trimEndVal">0.0 שנ'</span>
+              <button class="trim-btn" id="trimEndPlus">+</button>
+            </div>
+            <!-- מחשב: סלדר -->
+            <div class="trim-desktop">
+              <input type="range" id="trimEndSlider" min="0" max="10" value="0" step="0.5" />
+              <span class="trim-val" id="trimEndValDesktop">0.0 שנ'</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="settings-panel">
