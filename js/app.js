@@ -166,7 +166,7 @@ function saveSettings() {
       threshold: $('silenceThreshold').value,
       minSilence: $('minSilence').value,
       padding: $('padding').value,
-      sensitivity: document.querySelector('.sens-btn.active')?.dataset.level || 'medium',
+      sensitivity: $('sensitivitySlider').value,
     }));
   } catch(e) {}
 }
@@ -181,7 +181,7 @@ function loadSettings() {
     $('minSilenceVal').textContent = parseFloat(s.minSilence).toFixed(1) + " שנ'";
     $('padding').value = s.padding;
     $('paddingVal').textContent = parseFloat(s.padding).toFixed(2) + " שנ'";
-    if (s.sensitivity) setSensitivity(s.sensitivity);
+    if (s.sensitivity !== undefined) setSensitivity(parseInt(s.sensitivity));
   } catch(e) {}
 }
 
@@ -197,21 +197,27 @@ $('autoBtn').addEventListener('click', async () => {
   $('minSilenceVal').textContent = "0.5 שנ'";
   $('padding').value = 0.05;
   $('paddingVal').textContent = "0.05 שנ'";
-  setSensitivity('medium');
+  setSensitivity(2);
 
   // הפעל ניתוח מיידית
   analyzeBtn.click();
 });
 
 // ── בוחר רגישות ──
+// ── 5 רמות רגישות ──
 const SENSITIVITY_PRESETS = {
-  low:    { threshold: -55, minSilence: 0.8, padding: 0.1 },
-  medium: { threshold: -40, minSilence: 0.5, padding: 0.05 },
-  high:   { threshold: -28, minSilence: 0.3, padding: 0.02 },
+  0: { label: 'שקט מוחלט', threshold: -65, minSilence: 1.0, padding: 0.15 },
+  1: { label: 'עדין',       threshold: -52, minSilence: 0.7, padding: 0.10 },
+  2: { label: 'רגיל',       threshold: -40, minSilence: 0.5, padding: 0.05 },
+  3: { label: 'אגרסיבי',    threshold: -28, minSilence: 0.3, padding: 0.02 },
+  4: { label: 'מקסימום',    threshold: -18, minSilence: 0.2, padding: 0.01 },
 };
 
 function setSensitivity(level) {
+  level = parseInt(level);
   const p = SENSITIVITY_PRESETS[level];
+  if (!p) return;
+
   $('silenceThreshold').value = p.threshold;
   $('thresholdVal').textContent = p.threshold + ' dB';
   $('minSilence').value = p.minSilence;
@@ -219,15 +225,26 @@ function setSensitivity(level) {
   $('padding').value = p.padding;
   $('paddingVal').textContent = p.padding.toFixed(2) + " שנ'";
 
-  document.querySelectorAll('.sens-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.level === level);
+  // עדכן סלדר
+  $('sensitivitySlider').value = level;
+
+  // עדכן label
+  $('sensCurrentLabel').textContent = p.label;
+
+  // עדכן תוויות
+  document.querySelectorAll('.sens-ticks span').forEach((el, i) => {
+    el.classList.toggle('active-tick', i === level);
   });
+
   saveSettings();
 }
 
-document.querySelectorAll('.sens-btn').forEach(btn => {
-  btn.addEventListener('click', () => setSensitivity(btn.dataset.level));
+$('sensitivitySlider').addEventListener('input', function() {
+  setSensitivity(parseInt(this.value));
 });
+
+// אתחול
+setSensitivity(2);
 
 // ── Analyze ──
 analyzeBtn.addEventListener('click', async () => {
